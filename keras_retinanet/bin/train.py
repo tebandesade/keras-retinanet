@@ -42,6 +42,7 @@ from ..preprocessing.csv_generator import CSVGenerator
 from ..preprocessing.kitti import KittiGenerator
 from ..preprocessing.open_images import OpenImagesGenerator
 from ..preprocessing.pascal_voc import PascalVocGenerator
+from ..preprocessing.bogota import BogotaGenerator
 from ..utils.anchors import make_shapes_callback
 from ..utils.config import read_config_file, parse_anchor_parameters
 from ..utils.keras_version import check_keras_version
@@ -81,8 +82,7 @@ def model_with_weights(model, weights, skip_mismatch):
     return model
 
 
-def create_models(backbone_retinanet, num_classes, weights, multi_gpu=0,
-                  freeze_backbone=False, lr=1e-5, config=None):
+def create_models(backbone_retinanet, num_classes, weights, multi_gpu=0, freeze_backbone=False, config=None):
     """ Creates three models (model, training_model, prediction_model).
 
     Args
@@ -128,7 +128,7 @@ def create_models(backbone_retinanet, num_classes, weights, multi_gpu=0,
             'regression'    : losses.smooth_l1(),
             'classification': losses.focal()
         },
-        optimizer=keras.optimizers.adam(lr=lr, clipnorm=0.001)
+        optimizer=keras.optimizers.adam(lr=1e-5, clipnorm=0.001)
     )
 
     return model, training_model, prediction_model
@@ -268,6 +268,19 @@ def create_generators(args, preprocess_image):
             'test',
             **common_args
         )
+    elif args.dataset_type == 'bogota':
+        train_generator = BogotaGenerator(
+            args.bogota_path,
+            '8_15',
+            transform_generator=transform_generator,
+            **common_args
+        )
+
+        validation_generator = PascalVocGenerator(
+            args.pascal_path,
+            'test',
+            **common_args
+        )
     elif args.dataset_type == 'csv':
         train_generator = CSVGenerator(
             args.annotations,
@@ -365,6 +378,10 @@ def parse_args(args):
     coco_parser = subparsers.add_parser('coco')
     coco_parser.add_argument('coco_path', help='Path to dataset directory (ie. /tmp/COCO).')
 
+    bogota_parser = subparsers.add_parser('bogota')
+    bogota_parser.add_argument('bogota_path', help='Path to dataset directory (ie. /tmp/Bogota).')
+    bogota_parser.add_argument('--weights',           help='Initialize the model with weights from a file.')
+    bogota_parser.add_argument('--gpu',              help='Id of the GPU to use (as reported by nvidia-smi).')
     pascal_parser = subparsers.add_parser('pascal')
     pascal_parser.add_argument('pascal_path', help='Path to dataset directory (ie. /tmp/VOCdevkit).')
 
@@ -384,6 +401,8 @@ def parse_args(args):
     csv_parser = subparsers.add_parser('csv')
     csv_parser.add_argument('annotations', help='Path to CSV file containing annotations for training.')
     csv_parser.add_argument('classes', help='Path to a CSV file containing class label mapping.')
+    csv_parser.add_argument('--weights',           help='Initialize the model with weights from a file.')
+    csv_parser.add_argument('--gpu',              help='Id of the GPU to use (as reported by nvidia-smi).')
     csv_parser.add_argument('--val-annotations', help='Path to CSV file containing annotations for validation (optional).')
 
     group = parser.add_mutually_exclusive_group()
@@ -399,7 +418,6 @@ def parse_args(args):
     parser.add_argument('--multi-gpu-force',  help='Extra flag needed to enable (experimental) multi-gpu support.', action='store_true')
     parser.add_argument('--epochs',           help='Number of epochs to train.', type=int, default=50)
     parser.add_argument('--steps',            help='Number of steps per epoch.', type=int, default=10000)
-    parser.add_argument('--lr',               help='Learning rate.', type=float, default=1e-5)
     parser.add_argument('--snapshot-path',    help='Path to store snapshots of models during training (defaults to \'./snapshots\')', default='./snapshots')
     parser.add_argument('--tensorboard-dir',  help='Log directory for Tensorboard output', default='./logs')
     parser.add_argument('--no-snapshots',     help='Disable saving snapshots.', dest='snapshots', action='store_false')
@@ -410,10 +428,6 @@ def parse_args(args):
     parser.add_argument('--image-max-side',   help='Rescale the image if the largest side is larger than max_side.', type=int, default=1333)
     parser.add_argument('--config',           help='Path to a configuration parameters .ini file.')
     parser.add_argument('--weighted-average', help='Compute the mAP using the weighted average of precisions among classes.', action='store_true')
-
-    # Fit generator arguments
-    parser.add_argument('--workers', help='Number of multiprocessing workers. To disable multiprocessing, set workers to 0', type=int, default=1)
-    parser.add_argument('--max-queue-size', help='Queue length for multiprocessing workers in fit generator.', type=int, default=10)
 
     return check_args(parser.parse_args(args))
 
@@ -464,7 +478,6 @@ def main(args=None):
             weights=weights,
             multi_gpu=args.multi_gpu,
             freeze_backbone=args.freeze_backbone,
-            lr=args.lr,
             config=args.config
         )
 
@@ -486,12 +499,6 @@ def main(args=None):
         args,
     )
 
-    # Use multiprocessing if workers > 0
-    if args.workers > 0:
-        use_multiprocessing = True
-    else:
-        use_multiprocessing = False
-
     # start training
     training_model.fit_generator(
         generator=train_generator,
@@ -499,9 +506,6 @@ def main(args=None):
         epochs=args.epochs,
         verbose=1,
         callbacks=callbacks,
-        workers=args.workers,
-        use_multiprocessing=use_multiprocessing,
-        max_queue_size=args.max_queue_size
     )
 
 

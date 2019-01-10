@@ -21,7 +21,7 @@ import sys
 import keras
 import tensorflow as tf
 
-# Allow relative imports when being executed as script.
+import numpy as np # Allow relative imports when being executed as script.
 if __name__ == "__main__" and __package__ is None:
     sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
     import keras_retinanet.bin  # noqa: F401
@@ -96,8 +96,10 @@ def parse_args(args):
     csv_parser = subparsers.add_parser('csv')
     csv_parser.add_argument('annotations', help='Path to CSV file containing annotations for evaluation.')
     csv_parser.add_argument('classes', help='Path to a CSV file containing class label mapping.')
-
-    parser.add_argument('model',              help='Path to RetinaNet model.')
+    csv_parser.add_argument('--model',              help='Path to RetinaNet model.')
+    csv_parser.add_argument('--gpu',              help='Id of the GPU to use (as reported by nvidia-smi).')
+    
+    parser.add_argument('--model',              help='Path to RetinaNet model.')
     parser.add_argument('--convert-model',    help='Convert the model to an inference model (ie. the input is a training model).', action='store_true')
     parser.add_argument('--backbone',         help='The backbone of the model.', default='resnet50')
     parser.add_argument('--gpu',              help='Id of the GPU to use (as reported by nvidia-smi).')
@@ -180,8 +182,17 @@ def main(args=None):
             print('No test instances found.')
             return
 
+<<<<<<< HEAD
+
+        np.save('average_precision.npy',average_precision)   
+        if args.weighted_average:
+            print('mAP: {:.4f}'.format(sum([a * b for a, b in zip(total_instances, precisions)]) / sum(total_instances)))
+        else:
+            print('mAP: {:.4f}'.format(sum(precisions) / sum(x > 0 for x in total_instances)))
+=======
         print('mAP using the weighted average of precisions among classes: {:.4f}'.format(sum([a * b for a, b in zip(total_instances, precisions)]) / sum(total_instances)))
         print('mAP: {:.4f}'.format(sum(precisions) / sum(x > 0 for x in total_instances)))
+>>>>>>> 615688a0c13edcfb4aa994e52e6c12c5be3167a0
 
 
 if __name__ == '__main__':
